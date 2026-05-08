@@ -30,8 +30,18 @@ class JsonFormatter(logging.Formatter):
             "cache_hit",
             "cache_hit_rate",
             "context_count",
+            "confidence",
             "query_length",
             "retrieved_count",
+            "raw_answer",
+            "validated_answer",
+            "accepted",
+            "final_answer",
+            "grounded",
+            "validator_input",
+            "validator_output",
+            "rejection_reason",
+            "payload",
             "total_requests",
             "total_errors",
             "vector_store",
@@ -61,7 +71,7 @@ class JsonFormatter(logging.Formatter):
             if "error" not in payload:
                 payload["error"] = self.formatException(record.exc_info)
             payload["exc_info"] = self.formatException(record.exc_info)
-        return json.dumps(payload, ensure_ascii=True)
+        return json.dumps(payload, ensure_ascii=True, default=str)
 
 
 def configure_logging(log_level: str, log_format: str) -> None:

@@ -1,9 +1,12 @@
+import logging
+
 from fastapi import APIRouter, Depends, Request
 
 from apps.api.schemas import ChatRequest, ChatResponse
 from services.auth.dependencies import get_current_user
 from services.chat_service import handle_chat
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
 
 
@@ -55,6 +58,16 @@ async def chat_endpoint(
         message=payload.message,
         conversation_id=payload.conversation_id,
         request_id=request_id,
+    )
+    response_payload = {
+        "answer": result.answer,
+        "citations": result.citations,
+        "confidence": result.confidence,
+        "conversation_id": result.conversation_id,
+    }
+    logger.info(
+        "chat.response_payload",
+        extra={"request_id": request_id, "payload": response_payload},
     )
     return ChatResponse(
         answer=result.answer,

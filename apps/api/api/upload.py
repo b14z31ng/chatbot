@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from services.auth.dependencies import require_admin
 from services.rag.embeddings import get_embeddings
 from services.rag.ingestion import ingest_pdf
-from services.rag.vector_store import add_documents
+from services.rag.vector_store import add_documents, save_store
 
 router = APIRouter(tags=["upload"])
 logger = logging.getLogger(__name__)
@@ -64,7 +64,12 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="File too large (max 10MB).")
     file_path.write_bytes(content)
 
-    chunks = ingest_pdf(str(file_path), document_id=document_id)
+    chunks = ingest_pdf(
+        str(file_path),
+        document_id=document_id,
+        chat_id=None,
+        filename=Path(file.filename).name if file.filename else None,
+    )
     if not chunks:
         logger.warning("upload.no_chunks", extra={"document_id": document_id})
         return {"document_id": document_id, "chunks": 0}
@@ -72,5 +77,6 @@ async def upload_document(
     texts = [chunk["text"] for chunk in chunks]
     embeddings = get_embeddings(texts)
     add_documents(chunks, embeddings)
+    save_store()
     logger.info("upload.ingested", extra={"document_id": document_id, "chunks": len(chunks)})
     return {"document_id": document_id, "chunks": len(chunks)}
