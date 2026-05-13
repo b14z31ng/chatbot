@@ -30,3 +30,7 @@ rag_chat.db
 
 # Node.js (frontend)
 node_modules/
+
+# Local test artifacts
+test.pdf
+test_rag.py
