@@ -18,6 +18,22 @@ Rules:
 """
 
 
+_FACTUAL_SYSTEM = """
+You are a document question-answering assistant.
+
+Answer ONLY using the provided context.
+
+Rules:
+- Provide complete explanations.
+- Keep answers concise but COMPLETE.
+- Never cut sentences halfway.
+- Use 2-5 sentences when necessary.
+- Use exact names and facts from the document.
+- If the answer is missing, say:
+'I cannot answer this from the provided context.'
+"""
+
+
 _COMPLEX_SYSTEM = """
 You are a document analysis assistant.
 
@@ -55,23 +71,75 @@ def _has_pronoun_reference(query: str) -> bool:
     return any(p in q for p in pronouns)
 
 
+def _has_followup_reference(query: str) -> bool:
+    q = f" {query.lower()} "
+
+    refs = [
+        " it ",
+        " this ",
+        " that ",
+        " they ",
+        " them ",
+        " its ",
+        " their ",
+        " incident ",
+        " event ",
+        " movement ",
+    ]
+
+    return any(r in q for r in refs)
+
+
 def build_prompt(
     contexts: list[ContextChunk],
     user_query: str,
     chat_history: list[Message],
-    is_complex: bool = True,
+    mode: str = "factual",
+    **kwargs,
 ) -> str:
     """
     Build a grounded prompt with conversational continuity.
     """
 
-    system = _COMPLEX_SYSTEM if is_complex else _SIMPLE_SYSTEM
+    q_lower = user_query.lower()
+
+    is_date_query = any(
+        x in q_lower
+        for x in [
+            "when",
+            "what year",
+            "which year",
+            "what date",
+            "date of",
+            "year of",
+            "timeline",
+            "occurred",
+            "happened",
+        ]
+    )
+
+    if "is_complex" in kwargs:
+        mode = "complex" if kwargs["is_complex"] else "entity"
+
+    if is_date_query:
+        system = (
+            "Answer ONLY using the provided context. "
+            "For date or year questions, return the exact year, date, or time period explicitly mentioned in the document. "
+            "Do not shorten the answer before including the actual date or year. "
+            "Use complete factual sentences."
+        )
+    elif mode == "entity":
+        system = _SIMPLE_SYSTEM
+    elif mode == "factual":
+        system = _FACTUAL_SYSTEM
+    else:
+        system = _COMPLEX_SYSTEM
 
     # =========================
     # CONTEXT BUILDING
     # =========================
     if contexts:
-        if is_complex:
+        if mode == "complex":
             context_text = "\n\n---\n\n".join(
                 c.content for c in contexts[:5]
             )
@@ -86,8 +154,8 @@ def build_prompt(
     history_lines: list[str] = []
 
     for msg in chat_history[-6:]:
-        prefix = "User" if msg.role == "user" else "Assistant"
-        history_lines.append(f"{prefix}: {msg.content}")
+        role = "User" if msg.role == "user" else "Assistant"
+        history_lines.append(f"{role}: {msg.content}")
 
     history_text = "\n".join(history_lines)
 
@@ -98,15 +166,16 @@ def build_prompt(
 
     if history_text:
         parts += [
-            "Conversation so far:\n",
+            "Conversation history:\n",
             history_text,
             "\n\n",
         ]
 
-    if history_text and _has_pronoun_reference(user_query):
+    if history_text and _has_followup_reference(user_query):
         parts += [
-            _CONTINUATION_NOTE,
-            "\n\n",
+            "Follow-up question detected. "
+            "Resolve references like 'it', 'that', 'this incident', "
+            "'they', or 'the movement' using the conversation history first.\n\n",
         ]
 
     parts += [

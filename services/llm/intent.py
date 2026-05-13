@@ -1,122 +1,88 @@
-"""Query intent classifier — routes queries to retrieval-only or Gemini pipelines.
+from dataclasses import dataclass
 
-Classification is purely keyword/pattern-based (zero latency, zero API cost).
 
-Taxonomy
---------
-SIMPLE   →  factual lookup (entity, value, date, contact info, number)
-COMPLEX  →  reasoning, synthesis, summarization, explanation, comparison
+@dataclass
+class QueryIntent:
+    mode: str
+    top_k: int
+    max_tokens: int
 
-Design goal: minimize false-positives (classifying complex queries as simple),
-since a missed complex query just adds a Gemini call, whereas a missed simple
-query wastes a free extraction opportunity.
-"""
-from __future__ import annotations
 
-import re
-from typing import Literal
+ENTITY_PATTERNS = [
+    "company name",
+    "client name",
+    "customer name",
+    "invoice number",
+    "quotation number",
+    "reference number",
+    "email address",
+    "phone number",
+    "contact number",
+    "issue date",
+    "due date",
+    "vendor name",
+    "organization name",
+    "prepared by",
+]
 
-# ---------------------------------------------------------------------------
-# Keyword sets
-# ---------------------------------------------------------------------------
-
-# Triggers for COMPLEX mode (Gemini required)
-_COMPLEX_TRIGGERS: frozenset[str] = frozenset([
-    # Summarization
-    "summarize", "summary", "summarise", "summarization",
-    # Explanation / analysis
-    "explain", "explanation", "analyze", "analyse", "analysis",
-    "elaborate", "elaboration", "breakdown", "break down",
-    # Description
-    "describe", "description", "overview", "outline",
-    # Comparison / synthesis
-    "compare", "comparison", "contrast", "versus", "vs",
-    "synthesize", "synthesis",
-    # Detail requests
-    "detailed", "in depth", "in-depth", "comprehensive", "complete", "full",
-    "details", "tell me about", "tell me more",
-    # Opinion / evaluation
-    "evaluate", "assessment", "assess", "review",
-    "main points", "key points", "key findings",
-    "what does this mean", "what are the main",
-    "give me a", "provide a", "write a",
-    # Document-type phrase triggers (added for summary routing fix)
-    "what is this",
-    "what is the pdf",
-    "what does this document",
-    "what does this agreement",
-    "what does this quotation",
-    "what does this proposal",
-    "project",
+COMPLEX_TERMS = [
+    "summary",
+    "summarize",
+    "explain in detail",
+    "describe",
+    "overview",
+    "details",
+    "scope",
+    "purpose",
+    "what is the pdf about",
+    "what does this document say",
     "agreement",
     "proposal",
     "contract",
-    "scope",
-    "purpose",
-])
+]
 
-# Triggers for SIMPLE mode (regex extraction — no Gemini)
-_SIMPLE_TRIGGERS: frozenset[str] = frozenset([
-    # Identity
-    "company name", "company", "organization", "organisation",
-    "prepared by", "prepared", "who made", "who created", "who wrote",
-    # Financial
-    "cost", "price", "amount", "total", "fee", "charge", "invoice",
-    "quotation", "quote", "budget", "rate", "value",
-    # Contact
-    "email", "e-mail", "phone", "telephone", "mobile", "fax",
-    "address", "location", "office", "city", "country", "zip", "postal",
-    # Document metadata
-    "date", "issued", "dated", "version", "number", "reference", "ref",
-    "invoice number", "document number", "project number",
-    # Named entity lookups
-    "what is the", "what is", "who is",
-    "what was", "when was", "where is", "when is",
-])
+def classify_query(query: str) -> QueryIntent:
+    query_lower = query.lower().strip()
 
+    if any(p in query_lower for p in ENTITY_PATTERNS):
+        return QueryIntent(
+            mode="entity",
+            top_k=3,
+            max_tokens=80,
+        )
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+    if any(query_lower.startswith(w) for w in [
+        "what",
+        "when",
+        "why",
+        "how",
+        "who",
+        "where",
+        "which",
+        "explain",
+        "describe",
+        "summarize",
+    ]):
+        return QueryIntent(
+            mode="complex",
+            top_k=12,
+            max_tokens=500,
+        )
 
-QueryType = Literal["simple", "complex"]
-
-
-def classify_query(query: str) -> QueryType:
-    """Classify a query as 'simple' (retrieval-only) or 'complex' (Gemini).
-
-    Priority: complex keywords take precedence over simple ones to avoid
-    degrading quality on ambiguous queries.
-    """
-    q = query.lower().strip()
-
-    # Complex wins if any trigger present
-    if any(kw in q for kw in _COMPLEX_TRIGGERS):
-        return "complex"
-
-    # Simple if any simple trigger present
-    if any(kw in q for kw in _SIMPLE_TRIGGERS):
-        return "simple"
-
-    # Short queries (≤ 6 words) without complex markers → treat as simple
-    word_count = len(q.split())
-    if word_count <= 6:
-        return "simple"
-
-    # Default: complex (safer — uses Gemini, preserves quality)
-    return "complex"
+    return QueryIntent(
+        mode="factual",
+        top_k=6,
+        max_tokens=220,
+    )
 
 
 def is_complex_query(query: str) -> bool:
-    """Return True if the query requires Gemini generation."""
-    return classify_query(query) == "complex"
+    return classify_query(query).mode == "complex"
 
 
 def top_k_for_query(query: str) -> int:
-    """Return the ideal FAISS retrieval depth for this query type."""
-    return 12 if is_complex_query(query) else 8
+    return classify_query(query).top_k
 
 
 def max_tokens_for_query(query: str) -> int:
-    """Return the ideal Gemini max_output_tokens for this query type."""
-    return 400 if is_complex_query(query) else 150
+    return classify_query(query).max_tokens

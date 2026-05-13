@@ -22,9 +22,11 @@ MODEL_NAME = "gemini-2.5-flash"
 LLM_UNAVAILABLE = "LLM_SERVICE_UNAVAILABLE"
 LLM_RATE_LIMITED = "LLM_RATE_LIMITED"
 
-# Token limits — simple raised so entity names are never truncated
-TOKENS_SIMPLE = 150
-TOKENS_COMPLEX = 400
+# Token limits — sized to avoid truncation for factual/date answers
+TOKENS_ENTITY = 80
+TOKENS_FACTUAL = 220
+TOKENS_COMPLEX = 500
+TOKENS_SIMPLE = TOKENS_FACTUAL
 
 _RETRY_WAIT_SECONDS = 2
 

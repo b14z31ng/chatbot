@@ -297,6 +297,25 @@ def _validate_answer(answer: str) -> tuple[bool, str]:
 # Context retrieval
 # ---------------------------------------------------------------------------
 
+FOLLOWUP_TERMS = {
+    "it",
+    "this",
+    "that",
+    "they",
+    "them",
+    "their",
+    "incident",
+    "event",
+    "movement",
+    "topic",
+    "issue",
+}
+
+
+def _is_followup_query(query: str) -> bool:
+    q = query.lower().split()
+    return any(word in FOLLOWUP_TERMS for word in q)
+
 def _retrieve_context(
     query: str,
     top_k: int,
@@ -439,7 +458,20 @@ def handle_chat(
     try:
         # ── Retrieval ─────────────────────────────────────────────────────
         t_retrieval = time.perf_counter()
-        contexts = _retrieve_context(message, top_k, document_ids, chat_id, request_id)
+        retrieval_query = message
+
+        if _is_followup_query(message):
+            recent_history = get_history(conversation_id)[-4:]
+
+            history_text = " ".join(
+                msg.content
+                for msg in recent_history
+                if msg.role == "user"
+            )
+
+            retrieval_query = f"{history_text} {message}"
+
+        contexts = _retrieve_context(retrieval_query, top_k, document_ids, chat_id, request_id)
         retrieval_ms = (time.perf_counter() - t_retrieval) * 1000
 
         # ── Entity extraction short-circuit ──────────────────────────────

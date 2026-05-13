@@ -81,22 +81,69 @@ _EXPANSION_MAP: list[tuple[set[str], list[str]]] = [
 
 
 def _expand_query(query: str) -> list[str]:
-    """Return queries to embed: expansions FIRST, original last.
-
-    Running expanded metadata queries before the original query means
-    header/label chunks (e.g. 'Prepared by: Kyrozen') rank above
-    generic content paragraphs containing service names.
     """
-    q_lower = query.lower().strip()
-    expansions: list[str] = []
+    Universal semantic query expansion.
 
-    for keywords, extra_queries in _EXPANSION_MAP:
-        if any(kw in q_lower for kw in keywords):
-            expansions.extend(extra_queries)
-            break
+    Converts casual/natural user questions into
+    retrieval-friendly variants without hardcoding
+    document-specific knowledge.
+    """
 
-    expansions.append(query)  # original always last (anchor)
-    return expansions
+    q = query.lower().strip()
+
+    expansions = [query]
+
+    # temporal questions
+    if any(x in q for x in ["when", "date", "year", "time"]):
+        expansions.extend([
+            q.replace("when", "date"),
+            q.replace("when", "year"),
+            f"{q} historical event timeline",
+        ])
+
+    # explanation / impact
+    if any(x in q for x in ["impact", "effect", "result", "importance"]):
+        expansions.extend([
+            f"{q} consequences",
+            f"{q} significance",
+            f"{q} outcome",
+        ])
+
+    # people / founders
+    if any(x in q for x in ["who", "founder", "leader", "started"]):
+        expansions.extend([
+            f"{q} founded by",
+            f"{q} leader",
+            f"{q} person",
+        ])
+
+    # summaries
+    if any(x in q for x in ["about", "summary", "explain", "describe"]):
+        expansions.extend([
+            f"{q} overview",
+            f"{q} details",
+            f"{q} background",
+        ])
+
+    # entity lookup
+    if any(x in q for x in ["company", "client", "organization", "name"]):
+        expansions.extend([
+            f"{q} prepared by",
+            f"{q} organization",
+            f"{q} header",
+        ])
+
+    # deduplicate while preserving order
+    seen = set()
+    final_queries = []
+
+    for item in expansions:
+        cleaned = item.strip()
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            final_queries.append(cleaned)
+
+    return final_queries
 
 
 # ---------------------------------------------------------------------------

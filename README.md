@@ -8,6 +8,8 @@ This project provides a FastAPI backend and a React frontend for a multi-chat RA
 ## Features
 - Chat-scoped PDF uploads and document memory
 - LangChain-powered PDF chunking + FAISS vector search
+- Universal query expansion for better retrieval recall
+- Conversational follow-up handling using recent chat history
 - Gemini 2.5 Flash responses with safe fallbacks
 - JWT authentication and admin seeding
 - Structured JSON logging
@@ -18,6 +20,19 @@ This project provides a FastAPI backend and a React frontend for a multi-chat RA
 - Service layer: chat pipeline, prompt building, memory
 - RAG layer: ingestion, embeddings, FAISS per chat
 - LLM layer: Gemini via LangChain
+
+## Answer Routing
+The backend now routes questions into three answer styles:
+- Entity: short metadata lookups such as company name, invoice number, or prepared by.
+- Factual: complete but concise answers for general factual questions.
+- Complex: longer answers for WH, explanation, summary, and follow-up questions.
+
+Typical token budgets:
+- Entity: 80 tokens
+- Factual: 220 tokens
+- Complex: 500 tokens
+
+This helps prevent mid-sentence truncation for date, history, and explanation questions while keeping metadata answers short.
 
 ## Tech Stack
 - FastAPI, SQLAlchemy (SQLite)
@@ -67,6 +82,11 @@ Frontend API base URL is set in [frontend/src/services/api.js](frontend/src/serv
 - Uploads: `data/uploads/`
 - Vector stores: `data/vector_store/chat_<chat_id>/index.faiss` + `index.pkl`
 
+## Conversation Handling
+- Recent chat history is included in prompts so follow-up questions can resolve references like "it", "that incident", or "they".
+- Retrieval is also enriched with recent same-chat user turns for follow-up questions, improving recall without leaking memory across chats.
+- Memory stays scoped to the active conversation only.
+
 ## API Endpoints (Core)
 - `POST /login`
 - `GET /chats`, `POST /chats`, `PATCH /chats/{id}`, `DELETE /chats/{id}`
@@ -82,6 +102,12 @@ Structured JSON logs are written to stdout. Key events include:
 - `chat.validator`
 - `chat.final_answer_before_response`
 - `chat.response_payload`
+
+## Recent Changes
+- Improved intent routing so WH questions are treated as complex questions instead of ultra-short entity lookups.
+- Added follow-up query enrichment before retrieval.
+- Increased token budgets for factual and complex answers to reduce truncation.
+- Pinned `bcrypt` to `4.0.1` for compatibility with `passlib[bcrypt]`.
 
 ## Deployment
 Docker Compose:
