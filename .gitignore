@@ -1,5 +1,6 @@
 # Environment
 .env
+.venv/
 
 # Python
 __pycache__/
@@ -23,6 +24,9 @@ Thumbs.db
 # FAISS index artifacts
 *.faiss
 *.index
+data/vector_store/
+data/uploads/
+rag_chat.db
 
 # Node.js (frontend)
 node_modules/
